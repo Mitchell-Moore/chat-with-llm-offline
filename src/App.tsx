@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import Progress from '@/components/ui/Progress';
 import Chat from '@/components/ui/Chat';
-import { StopIcon, ArrowRightIcon } from '@/components/ui/icons';
+import {
+  StopIcon,
+  ArrowRightIcon,
+  NewChatIcon,
+  SidebarIcon,
+} from '@/components/ui/icons';
+import {
+  createChat,
+  getCurrentChat,
+  getMessages,
+  saveMessage,
+} from './db/actions';
+
 function App() {
   const worker = useRef<Worker | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -19,6 +31,7 @@ function App() {
     { file: string; progress: number; total: number }[]
   >([]);
   const [isRunning, setIsRunning] = useState(false);
+  // const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Inputs and outputs
   const [input, setInput] = useState('');
@@ -27,6 +40,30 @@ function App() {
   );
   const [tps, setTps] = useState<number | null>(null);
   const [numTokens, setNumTokens] = useState<number>(0);
+
+  useEffect(() => {
+    // Load current chat and its messages
+    async function loadCurrentChat() {
+      let chat = await getCurrentChat();
+
+      if (!chat) {
+        await createChat({});
+        chat = await getCurrentChat();
+      }
+
+      if (chat) {
+        const chatMessages = await getMessages(chat.id);
+        setMessages(
+          chatMessages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          }))
+        );
+      }
+    }
+
+    loadCurrentChat();
+  }, []);
 
   useEffect(() => {
     // Create the worker if it does not yet exist.
@@ -38,7 +75,6 @@ function App() {
     }
 
     const onMessageReceived = (e: MessageEvent) => {
-      console.log('onMessageReceived', e);
       switch (e.data.status) {
         case 'loading':
           // Model file start load: add a new progress item to the list.
@@ -156,11 +192,43 @@ function App() {
     }
   }, [messages, isRunning]);
 
+  useEffect(() => {
+    if (!isRunning && messages.length > 0 && status === 'ready') {
+      getCurrentChat()
+        .then((chat) => {
+          const lastMessage = messages.at(-1);
+          if (chat && lastMessage) {
+            saveMessage({
+              chatId: chat.id,
+              role: 'assistant',
+              content: lastMessage.content,
+            });
+          }
+        })
+        .catch((e) => {
+          console.error('Error saving message', e);
+        });
+    }
+  }, [messages, isRunning, status]);
+
   function onEnter(message: string) {
     setMessages((prev) => [...prev, { role: 'user', content: message }]);
     setTps(null);
     setIsRunning(true);
     setInput('');
+    getCurrentChat()
+      .then((chat) => {
+        if (chat) {
+          saveMessage({
+            chatId: chat.id,
+            role: 'user',
+            content: message,
+          });
+        }
+      })
+      .catch((e) => {
+        console.error('Error saving message', e);
+      });
   }
 
   function onInterrupt() {
@@ -169,17 +237,34 @@ function App() {
     worker?.current?.postMessage({ type: 'interrupt' });
   }
 
+  function newChatOnClick() {
+    createChat({});
+    setMessages([]);
+    setIsRunning(false);
+    setStatus('ready');
+  }
+
+  function onSidebarClick() {}
+
   return IS_WEBGPU_AVAILABLE ? (
-    <div className="flex flex-col h-screen mx-auto items justify-end text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900">
-      {status === null && messages.length === 0 && (
+    <div className="flex flex-col mx-auto items justify-end text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900 relative w-full h-screen">
+      <div className="absolute top-0 left-0 w-full bg-white z-10 h-20 py-3 px-5 flex justify-start items-center">
+        <div
+          className="flex items-center justify-center rounded-md hover:bg-gray-100 p-1.5 cursor-pointer mr-2"
+          onClick={onSidebarClick}
+        >
+          <SidebarIcon />
+        </div>
+        <div
+          className="flex items-center justify-center rounded-md hover:bg-gray-100 p-1.5 cursor-pointer"
+          onClick={newChatOnClick}
+        >
+          <NewChatIcon />
+        </div>
+      </div>
+      {status === null && (
         <div className="h-full overflow-auto scrollbar-thin flex justify-center items-center flex-col relative">
           <div className="flex flex-col items-center mb-1 max-w-[440px] text-center">
-            <img
-              src="logo.png"
-              width="75%"
-              height="auto"
-              className="block"
-            ></img>
             <h1 className="text-4xl font-bold mb-1">Powered by Llama-3.2</h1>
             <h2 className="font-semibold">
               A private and powerful AI chatbot <br />
@@ -239,7 +324,7 @@ function App() {
             )}
 
             <button
-              className="border px-4 py-2 rounded-lg bg-blue-400 text-white hover:bg-blue-500 disabled:bg-blue-100 disabled:cursor-not-allowed select-none"
+              className="border px-4 py-2 rounded-lg bg-blue-400 text-white hover:bg-blue-500 disabled:bg-blue-100 disabled:cursor-not-allowed select-none cursor-pointer"
               onClick={() => {
                 worker?.current?.postMessage({ type: 'load' });
                 setStatus('loading');

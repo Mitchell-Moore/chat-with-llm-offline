@@ -21,6 +21,10 @@ export const getChat = async (chatId: number) => {
   return await db.chats.get(chatId);
 };
 
+export const getChats = async () => {
+  return await db.chats.toArray();
+};
+
 export const saveMessage = async (
   message: Omit<Message, 'id' | 'timestamp'>
 ) => {

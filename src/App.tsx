@@ -243,8 +243,8 @@ function App() {
     worker?.current?.postMessage({ type: 'interrupt' });
   }
 
-  function newChatOnClick() {
-    createChat({});
+  async function newChatOnClick() {
+    await createChat({});
     setMessages([]);
     setIsRunning(false);
     setStatus('ready');

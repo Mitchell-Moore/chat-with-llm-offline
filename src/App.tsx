@@ -38,12 +38,18 @@ function App() {
   );
   const [tps, setTps] = useState<number | null>(null);
   const [numTokens, setNumTokens] = useState<number>(0);
+  const creatingChatRef = useRef(false);
 
   async function loadCurrentChat() {
-    console.log('loadCurrentChat');
     let chat = await getCurrentChat();
 
     if (!chat) {
+      if (creatingChatRef.current) {
+        return;
+      }
+
+      creatingChatRef.current = true;
+
       await createChat({});
       chat = await getCurrentChat();
     }
@@ -247,7 +253,6 @@ function App() {
 
   function onSidebarClick() {
     setIsSidebarOpen(!isSidebarOpen);
-    console.log(isSidebarOpen);
   }
 
   async function handleChatSelect(chatId: number) {
@@ -271,8 +276,8 @@ function App() {
         onChatSelect={handleChatSelect}
       />
       <div
-        className={`flex flex-col mx-auto items justify-end transition-all duration-300 ease-in-out w-full ${
-          isSidebarOpen ? 'ml-64' : 'ml-0'
+        className={`flex flex-col mx-auto items-center justify-end transition-all duration-300 ease-in-out w-full ${
+          isSidebarOpen ? 'pl-50' : 'pl-0'
         }`}
       >
         <NavBar
@@ -391,24 +396,10 @@ function App() {
                         {tps.toFixed(2)}
                       </span>
                       <span className="text-gray-500 dark:text-gray-300">
-                        tokens/second
+                        tokens/second&#41;
                       </span>
                     </>
                   }
-                  {!isRunning && (
-                    <>
-                      <span className="mr-1">&#41;.</span>
-                      <span
-                        className="underline cursor-pointer"
-                        onClick={() => {
-                          worker?.current?.postMessage({ type: 'reset' });
-                          setMessages([]);
-                        }}
-                      >
-                        Reset
-                      </span>
-                    </>
-                  )}
                 </>
               )}
             </p>
